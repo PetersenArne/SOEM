@@ -15,6 +15,8 @@
 
 #include "ethercat.h"
 
+#define PRINT 0
+
 #define EC_TIMEOUTMON 500
 
 char IOmap[4096];
@@ -26,11 +28,96 @@ boolean inOP;
 uint8 currentgroup = 0;
 boolean forceByteAlignment = FALSE;
 
+void print_iomap(uint8 slave_nr)
+{
+   if (!PRINT) return;
+   int j, oloop, iloop;
+   oloop = ec_slave[slave_nr].Obytes;
+   if ((oloop == 0) && (ec_slave[slave_nr].Obits > 0)) oloop = 1;
+   iloop = ec_slave[slave_nr].Ibytes;
+   if ((iloop == 0) && (ec_slave[slave_nr].Ibits > 0)) iloop = 1;
+
+   printf("\nS[%s]", ec_slave[slave_nr].name);
+   printf("\n    O[%d]:\t", ec_slave[slave_nr].Obytes);
+   for(j = 0 ; j < oloop; j++)
+   {
+      printf(" %2.2x", *(ec_slave[slave_nr].outputs + j));
+   }
+   printf("\n    I[%d]:\t", ec_slave[slave_nr].Ibytes);
+   for(j = 0 ; j < iloop; j++)
+   {
+         printf(" %2.2x", *(ec_slave[slave_nr].inputs + j));
+   }
+}
+
+uint8 s0in[13];
+uint8 s0out[7];
+
+void save_iomap(void)
+{
+   memcpy(s0out, ec_slave[4].outputs, ec_slave[4].Obits);
+   memcpy(s0in, ec_slave[4].inputs, ec_slave[4].Ibits);
+}
+
+void cpy_iomap(void)
+{
+   memcpy(ec_slave[4].outputs, s0out, ec_slave[4].Obits);
+   memcpy(ec_slave[4].inputs, s0in, ec_slave[4].Ibits);
+}
+
+int ken_receive_processdata(int timeout)
+{
+   int res = 0;
+   res = ec_receive_processdata(timeout);
+
+   if (PRINT)printf("\n+AR:");
+   print_iomap(2);
+   print_iomap(3);
+   print_iomap(4);
+
+   memcpy(ec_slave[3].outputs, (ec_slave[4].outputs + 6), 7);
+   memcpy(ec_slave[4].inputs, ec_slave[3].inputs, 7);
+
+   memset(ec_slave[4].outputs, 0, 13);
+   memset(ec_slave[3].inputs, 0, 7);
+
+   if (PRINT)printf("\n");
+
+   return res;
+}
+
+int coboworxSafety_setup(uint16 slave)
+{
+   int retval;
+
+   // map velocity
+   /* outputs */
+   uint16 map_1c12[1] = { 0x1600 };
+   /* inputs */
+   uint16 map_1c13[2] = { 0x1a00, 0x1a01 };
+
+   retval = 0;
+
+   // Set PDO mapping using Complete Access
+   // Strange, writing CA works, reading CA doesn't
+   // This is a protocol error of the slave.
+   retval += ec_SDOwrite(slave, 0x1c12, 0x00, TRUE, sizeof(map_1c12), &map_1c12, EC_TIMEOUTSAFE);
+   retval += ec_SDOwrite(slave, 0x1c13, 0x00, TRUE, sizeof(map_1c13), &map_1c13, EC_TIMEOUTSAFE);
+
+   while(EcatError) printf("%s", ec_elist2string());
+
+   if (PRINT)printf("coboworxSafety slave %d set, retval = %d\n", slave, retval);
+   return 1;
+}
+
+
 void simpletest(char *ifname)
 {
-    int i, j, oloop, iloop, chk;
+    int i, j, oloop, iloop, chk, slc;
     needlf = FALSE;
     inOP = FALSE;
+
+   //int i_mod = 0;
 
    printf("Starting simple test\n");
 
@@ -41,9 +128,31 @@ void simpletest(char *ifname)
       /* find and auto-config slaves */
 
 
-       if ( ec_config_init(FALSE) > 0 )
+      if ( ec_config_init(FALSE) > 0 )
       {
          printf("%d slaves found and configured.\n",ec_slavecount);
+
+         if((ec_slavecount > 1))
+         {
+            for(slc = 1; slc <= ec_slavecount; slc++)
+            {
+               //printf("Slave [%s] info: eep_man[%x] eep_id[%x]\n", ec_slave[slc].name, ec_slave[slc].eep_man, ec_slave[slc].eep_id);
+               // Kuhnke FIO Safety PLC, using ec_slave[].name is not very reliable
+               if((ec_slave[slc].eep_man == 0x48554b) && (ec_slave[slc].eep_id == 0x2d7a8))
+               {
+                  printf("Found %s at position %d\n", ec_slave[slc].name, slc);
+                  // link slave specific setup to preop->safeop hook
+                  //ec_slave[slc].PO2SOconfig = &KuhnkeFIOSafety_setup;
+               }
+               // coboworx Safety SDI16/SDO4, using ec_slave[].name is not very reliable
+               if((ec_slave[slc].eep_man == 0xd6e) && (ec_slave[slc].eep_id == 0x306cb))
+               {
+                  printf("Found %s at position %d\n", ec_slave[slc].name, slc);
+                  // link slave specific setup to preop->safeop hook
+                  //ec_slave[slc].PO2SOconfig = &coboworxSafety_setup;
+               }
+            }
+         }
 
          if (forceByteAlignment)
          {
@@ -56,9 +165,10 @@ void simpletest(char *ifname)
 
          ec_configdc();
 
-         printf("Slaves mapped, state to SAFE_OP.\n");
+         printf("Slaves mapped, state to SAFE_OP. ");
          /* wait for all slaves to reach SAFE_OP state */
          ec_statecheck(0, EC_STATE_SAFE_OP,  EC_TIMEOUTSTATE * 4);
+         printf("[0x%x] \n", ec_slave[0].state);
 
          oloop = ec_slave[0].Obytes;
          if ((oloop == 0) && (ec_slave[0].Obits > 0)) oloop = 1;
@@ -75,75 +185,144 @@ void simpletest(char *ifname)
          ec_slave[0].state = EC_STATE_OPERATIONAL;
          /* send one valid process data to make outputs in slaves happy*/
          ec_send_processdata();
-         ec_receive_processdata(EC_TIMEOUTRET);
+
+         if (PRINT)printf("\n-AS:");
+         print_iomap(2);
+         print_iomap(3);
+         print_iomap(4);
+
+         ken_receive_processdata(EC_TIMEOUTRET);
+
+         while (0)
+         {
+            ec_send_processdata();
+            if (PRINT)printf("\n-AS:");
+            print_iomap(2);
+            print_iomap(3);
+            print_iomap(4);
+            ken_receive_processdata(EC_TIMEOUTRET);
+            osal_usleep(4000);
+         }
+
          /* request OP state for all slaves */
          ec_writestate(0);
+         //ec_statecheck(0, EC_STATE_OPERATIONAL, 0);
+
+         //ec_statecheck(2, EC_STATE_OPERATIONAL, 0);
+         //ec_statecheck(4, EC_STATE_OPERATIONAL, 0);
+
          chk = 200;
          /* wait for all slaves to reach OP state */
          do
          {
             ec_send_processdata();
-            ec_receive_processdata(EC_TIMEOUTRET);
+
+            if (PRINT)
+            {
+               printf("\n-AS:");
+               print_iomap(2);
+               print_iomap(3);
+               print_iomap(4);
+            }
+
+            ken_receive_processdata(EC_TIMEOUTRET);
+
             ec_statecheck(0, EC_STATE_OPERATIONAL, 50000);
          }
          while (chk-- && (ec_slave[0].state != EC_STATE_OPERATIONAL));
+         
+         
+         if (PRINT)printf("\n\n"); 
+         for (uint8 slv = 0; slv < 5; slv++)
+         {
+            ec_send_processdata();
+            ec_receive_processdata(EC_TIMEOUTRET);
+            ec_statecheck(slv, EC_STATE_OPERATIONAL, 0);
+            printf("slave[%d].state = [0x%x] \n", slv, ec_slave[slv].state);
+         } 
+
          if (ec_slave[0].state == EC_STATE_OPERATIONAL )
          {
             printf("Operational state reached for all slaves.\n");
             inOP = TRUE;
-                /* cyclic loop */
-            for(i = 1; i <= 10000; i++)
+                  /* cyclic loop */
+            for(i = 1; i <= 1000; i++)
             {
                ec_send_processdata();
-               wkc = ec_receive_processdata(EC_TIMEOUTRET);
+               if (PRINT) {
+                  printf("\n-AS:");
+                  print_iomap(2);
+                  print_iomap(3);
+                  print_iomap(4);
+               }
+               wkc = ken_receive_processdata(EC_TIMEOUTRET);
 
-                    if(wkc >= expectedWKC)
-                    {
-                        printf("Processdata cycle %4d, WKC %d , O:", i, wkc);
+                  if(wkc >= expectedWKC && 0)
+                  {
+                     printf("Processdata cycle %4d, WKC %d , O:", i, wkc);
 
-                        for(j = 0 ; j < oloop; j++)
+                     for(j = 0 ; j < oloop; j++)
+                     {
+                           printf(" %2.2x", *(ec_slave[0].outputs + j));
+/*
+                        if (i == 1 && j == 0)
                         {
-                            printf(" %2.2x", *(ec_slave[0].outputs + j));
-                        }
-
-                        printf(" I:");
-                        for(j = 0 ; j < iloop; j++)
+                           *ec_slave[0].outputs = 0x1;
+                        } 
+                        else if (i != 1) 
                         {
-                            printf(" %2.2x", *(ec_slave[0].inputs + j));
+                           *ec_slave[0].outputs = (i_mod++ % 8);
                         }
-                        printf(" T:%"PRId64"\r",ec_DCtime);
-                        needlf = TRUE;
-                    }
-                    osal_usleep(5000);
+*/
+                     }
 
-                }
-                inOP = FALSE;
+                     printf(" I:");
+                     for(j = 0 ; j < iloop; j++)
+                     {
+                           printf(" %2.2x", *(ec_slave[0].inputs + j));
+                     }
+                     printf(" T:%"PRId64"\r",ec_DCtime);
+                     needlf = TRUE;
+                  }
+                     
+               osal_usleep(4000);
             }
-            else
-            {
-                printf("Not all slaves reached operational state.\n");
-                ec_readstate();
-                for(i = 1; i<=ec_slavecount ; i++)
-                {
-                    if(ec_slave[i].state != EC_STATE_OPERATIONAL)
-                    {
-                        printf("Slave %d State=0x%2.2x StatusCode=0x%4.4x : %s\n",
-                            i, ec_slave[i].state, ec_slave[i].ALstatuscode, ec_ALstatuscode2string(ec_slave[i].ALstatuscode));
-                    }
-                }
-            }
-            printf("\nRequest init state for all slaves\n");
-            ec_slave[0].state = EC_STATE_INIT;
-            /* request INIT state for all slaves */
-            ec_writestate(0);
-        }
-        else
-        {
-            printf("No slaves found!\n");
-        }
-        printf("End simple test, close socket\n");
-        /* stop SOEM, close socket */
-        ec_close();
+            inOP = FALSE;
+         }
+         else
+         {
+               printf("Not all slaves reached operational state.\n");
+               ec_readstate();
+               for(i = 1; i<=ec_slavecount ; i++)
+               {
+                  if(ec_slave[i].state != EC_STATE_OPERATIONAL)
+                  {
+                     printf("Slave %d State=0x%2.2x StatusCode=0x%4.4x : %s\n",
+                           i, ec_slave[i].state, ec_slave[i].ALstatuscode, ec_ALstatuscode2string(ec_slave[i].ALstatuscode));
+                  }
+               }
+         }
+         printf("\nRequest init state for all slaves\n");
+         ec_slave[0].state = EC_STATE_INIT;
+         /* request INIT state for all slaves */
+         ec_writestate(0);
+
+         printf("\n\n"); 
+         for (uint8 slv = 0; slv < 5; slv++)
+         {
+            ec_send_processdata();
+            ec_receive_processdata(EC_TIMEOUTRET);
+            ec_statecheck(slv, EC_STATE_INIT, 0);
+            printf("slave[%d].state = [0x%x] \n", slv, ec_slave[slv].state);
+         } 
+      }
+      else
+      {
+         printf("No slaves found!\n");
+      }
+      printf("End simple test, close socket\n");
+      /* stop SOEM, close socket */
+      ec_close();
     }
     else
     {

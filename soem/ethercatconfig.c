@@ -733,8 +733,9 @@ static int ecx_map_sii(ecx_contextt *context, uint16 slave)
    }
    context->slavelist[slave].Obits = (uint16)Osize;
    context->slavelist[slave].Ibits = (uint16)Isize;
-   EC_PRINT("     ISIZE:%d %d OSIZE:%d\n",
-      context->slavelist[slave].Ibits, Isize,context->slavelist[slave].Obits);
+   EC_PRINT("     ISIZE:%d OSIZE:%d\n",
+      //context->slavelist[slave].Ibits, Isize,context->slavelist[slave].Obits);
+      context->slavelist[slave].Ibits, context->slavelist[slave].Obits);
 
    return 1;
 }
@@ -853,7 +854,8 @@ static void ecx_config_find_mappings(ecx_contextt *context, uint8 group)
    /* find CoE and SoE mapping of slaves in multiple threads */
    for (slave = 1; slave <= *(context->slavecount); slave++)
    {
-      if (!group || (group == context->slavelist[slave].group))
+      if ((!group || (group == context->slavelist[slave].group)))
+        // && (slave != 6) && (slave != 7) )
       {
 #if EC_MAX_MAPT > 1
             /* multi-threaded version */
@@ -887,6 +889,7 @@ static void ecx_config_find_mappings(ecx_contextt *context, uint8 group)
    {
       if (!group || (group == context->slavelist[slave].group))
       {
+         EC_PRINT(" --Slave %d, find_mappings SII & prg SM\n", slave);
          ecx_map_sii(context, slave);
          ecx_map_sm(context, slave);
       }
@@ -998,7 +1001,17 @@ static void ecx_config_create_input_mappings(ecx_contextt *context, void *pIOmap
       if (context->slavelist[slave].FMMU[FMMUc].LogLength)
       {
          context->slavelist[slave].FMMU[FMMUc].PhysStartBit = 0;
-         context->slavelist[slave].FMMU[FMMUc].FMMUtype = 1;
+         if (  (context->slavelist[slave].eep_id == 0x306cb) && 
+               (context->slavelist[slave].eep_man == 0xd6e) && 
+               1
+               )
+         {
+            printf("### corrected coboworx Safety SDI16/SDO4 FMMU ###\n");
+            context->slavelist[slave].FMMU[FMMUc].FMMUtype = 2;
+         } else {
+            context->slavelist[slave].FMMU[FMMUc].FMMUtype = 1;
+         }
+
          context->slavelist[slave].FMMU[FMMUc].FMMUactive = 1;
          /* program FMMU for input */
          ecx_FPWR(context->port, configadr, ECT_REG_FMMU0 + (sizeof(ec_fmmut) * FMMUc),
@@ -1051,7 +1064,7 @@ static void ecx_config_create_output_mappings(ecx_contextt *context, void *pIOma
    uint16 configadr;
    uint8 FMMUc;
 
-   EC_PRINT("  OUTPUT MAPPING\n");
+   EC_PRINT(" =Slave %d, OUTPUT MAPPING\n", slave);
 
    FMMUc = context->slavelist[slave].FMMUunused;
    configadr = context->slavelist[slave].configadr;
@@ -1136,7 +1149,17 @@ static void ecx_config_create_output_mappings(ecx_contextt *context, void *pIOma
       if (context->slavelist[slave].FMMU[FMMUc].LogLength)
       {
          context->slavelist[slave].FMMU[FMMUc].PhysStartBit = 0;
-         context->slavelist[slave].FMMU[FMMUc].FMMUtype = 2;
+         if (  (context->slavelist[slave].eep_id == 0x306cb) && 
+               (context->slavelist[slave].eep_man == 0xd6e) && 
+               1
+               )
+         {
+            printf("### corrected coboworx Safety SDI16/SDO4 FMMU ###\n");
+            printf("### corrected coboworx Safety SDI16/SDO4 FMMU ###\n");
+            context->slavelist[slave].FMMU[FMMUc].FMMUtype = 1;
+         } else {
+            context->slavelist[slave].FMMU[FMMUc].FMMUtype = 2;
+         }
          context->slavelist[slave].FMMU[FMMUc].FMMUactive = 1;
          /* program FMMU for output */
          ecx_FPWR(context->port, configadr, ECT_REG_FMMU0 + (sizeof(ec_fmmut) * FMMUc),

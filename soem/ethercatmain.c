@@ -1744,6 +1744,7 @@ static int ecx_main_send_processdata(ecx_contextt *context, uint8 group, boolean
       wkc = 1;
       /* LRW blocked by one or more slaves ? */
       if(context->grouplist[group].blockLRW)
+      //if(1)
       {
          /* if inputs available generate LRD */
          if(context->grouplist[group].Ibytes)

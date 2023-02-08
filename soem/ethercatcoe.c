@@ -815,6 +815,8 @@ int ecx_readPDOmap(ecx_contextt *context, uint16 Slave, uint32 *Osize, uint32 *I
    uint32 Tsize;
    uint8 SMt_bug_add;
 
+   EC_PRINT("  >>ecx_readPDOmap Slave %d\n", Slave);
+
    *Isize = 0;
    *Osize = 0;
    SMt_bug_add = 0;
@@ -865,6 +867,35 @@ int ecx_readPDOmap(ecx_contextt *context, uint16 Slave, uint32 *Osize, uint32 *I
             {
                /* read the assign PDO */
                Tsize = ecx_readPDOassign(context, Slave, ECT_SDO_PDOASSIGN + iSM );
+
+               /* if coboworx Safety SDI16/SDO4 */
+               if ((context->slavelist[Slave].eep_id == 0x306cb) && (context->slavelist[Slave].eep_man == 0xd6e))
+               {
+                  printf("### corrected coboworx Safety SDI16/SDO4  IOs ###\n");
+                  if (iSM == 3)
+                  {
+                     Tsize = 104;
+                  } 
+                  else if (iSM == 2)
+                  {
+                     Tsize = 56;
+                  } 
+               }
+
+               /* if Kuhnke FIO Safety PLC */
+               if ((context->slavelist[Slave].eep_id == 0x2d7a8) && (context->slavelist[Slave].eep_man == 0x48554b))
+               {
+                  printf("### corrected Kuhnke FIO Safety PLC  IOs ###\n");
+                  if (iSM == 3)
+                  {
+                     Tsize = 56;
+                  } 
+                  else if (iSM == 2)
+                  {
+                     Tsize = 56;
+                  } 
+               }
+
                /* if a mapping is found */
                if (Tsize)
                {
@@ -914,6 +945,8 @@ int ecx_readPDOmapCA(ecx_contextt *context, uint16 Slave, int Thread_n, uint32 *
    uint8 nSM, iSM, tSM;
    uint32 Tsize;
    uint8 SMt_bug_add;
+
+   EC_PRINT("  >>ecx_readPDOmapCA Slave %d\n", Slave);
 
    *Isize = 0;
    *Osize = 0;

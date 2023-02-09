@@ -285,7 +285,7 @@ void simpletest(char *ifname)
                      needlf = TRUE;
                   }
                      
-               osal_usleep(4000);
+               osal_usleep(3900);
             }
             inOP = FALSE;
          }

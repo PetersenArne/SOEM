@@ -21,7 +21,7 @@
 #include "ethercatcoe.h"
 #include "ethercatsoe.h"
 #include "ethercatconfig.h"
-
+#include "ethercat.h"
 
 typedef struct
 {
@@ -1001,16 +1001,26 @@ static void ecx_config_create_input_mappings(ecx_contextt *context, void *pIOmap
       if (context->slavelist[slave].FMMU[FMMUc].LogLength)
       {
          context->slavelist[slave].FMMU[FMMUc].PhysStartBit = 0;
+         
          if (  (context->slavelist[slave].eep_id == 0x306cb) && 
                (context->slavelist[slave].eep_man == 0xd6e) && 
-               1
-               )
+               FMMU_SWITCH)
          {
             printf("### corrected coboworx Safety SDI16/SDO4 FMMU ###\n");
             context->slavelist[slave].FMMU[FMMUc].FMMUtype = 2;
-         } else {
+         } 
+         else if (   (context->slavelist[slave].eep_id == 0x2d7a8) && 
+                     (context->slavelist[slave].eep_man == 0x48554b) && 
+                     FMMU_SWITCH_PLC)
+         {
+            printf("### Kuhnke FIO Safety PLC FMMU ###\n");
+            context->slavelist[slave].FMMU[FMMUc].FMMUtype = 2;
+         } 
+         else
+         {
             context->slavelist[slave].FMMU[FMMUc].FMMUtype = 1;
          }
+
 
          context->slavelist[slave].FMMU[FMMUc].FMMUactive = 1;
          /* program FMMU for input */
@@ -1149,17 +1159,26 @@ static void ecx_config_create_output_mappings(ecx_contextt *context, void *pIOma
       if (context->slavelist[slave].FMMU[FMMUc].LogLength)
       {
          context->slavelist[slave].FMMU[FMMUc].PhysStartBit = 0;
+
          if (  (context->slavelist[slave].eep_id == 0x306cb) && 
                (context->slavelist[slave].eep_man == 0xd6e) && 
-               1
-               )
+               FMMU_SWITCH)
          {
             printf("### corrected coboworx Safety SDI16/SDO4 FMMU ###\n");
-            printf("### corrected coboworx Safety SDI16/SDO4 FMMU ###\n");
             context->slavelist[slave].FMMU[FMMUc].FMMUtype = 1;
-         } else {
+         } 
+         else if (   (context->slavelist[slave].eep_id == 0x2d7a8) && 
+                     (context->slavelist[slave].eep_man == 0x48554b) && 
+                     FMMU_SWITCH_PLC)
+         {
+            printf("### Kuhnke FIO Safety PLC FMMU ###\n");
+            context->slavelist[slave].FMMU[FMMUc].FMMUtype = 1;
+         } 
+         else
+         {
             context->slavelist[slave].FMMU[FMMUc].FMMUtype = 2;
          }
+
          context->slavelist[slave].FMMU[FMMUc].FMMUactive = 1;
          /* program FMMU for output */
          ecx_FPWR(context->port, configadr, ECT_REG_FMMU0 + (sizeof(ec_fmmut) * FMMUc),

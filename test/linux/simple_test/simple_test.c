@@ -15,6 +15,7 @@
 
 #include "ethercat.h"
 
+/* !!!! Safety will not work with this debugging option !!!! */
 #define PRINT 0
 
 #define EC_TIMEOUTMON 500
@@ -70,16 +71,38 @@ int ken_receive_processdata(int timeout)
    int res = 0;
    res = ec_receive_processdata(timeout);
 
-   if (PRINT)printf("\n+AR:");
+   if (PRINT)printf("\n+Safety wont run with debug prints on!\nAR:");
    print_iomap(2);
    print_iomap(3);
    print_iomap(4);
 
-   memcpy(ec_slave[3].outputs, (ec_slave[4].outputs + 6), 7);
-   memcpy(ec_slave[4].inputs, ec_slave[3].inputs, 7);
+   if (FMMU_SWITCH) 
+   {
+      memcpy(ec_slave[3].outputs, (ec_slave[4].outputs + 6), 7);
+      memcpy(ec_slave[4].inputs, ec_slave[3].inputs, 7);
 
-   memset(ec_slave[4].outputs, 0, 13);
-   memset(ec_slave[3].inputs, 0, 7);
+      memset(ec_slave[4].outputs, 0, 13);
+      memset(ec_slave[3].inputs, 0, 7);
+   }
+   else if (FMMU_SWITCH_PLC)
+   {
+      memcpy(ec_slave[3].outputs, (ec_slave[4].outputs + 6), 7);
+      memcpy(ec_slave[4].inputs, ec_slave[3].inputs, 7);
+
+      memset(ec_slave[4].outputs, 0, 13);
+      memset(ec_slave[3].inputs, 0, 7);
+   }
+   else
+   {
+      /*
+      memcpy(ec_slave[3].outputs, (ec_slave[4].outputs + 6), 7);
+      memcpy(ec_slave[4].inputs, ec_slave[3].inputs, 7);
+
+      memset(ec_slave[4].outputs, 0, 13);
+      memset(ec_slave[3].inputs, 0, 7);
+      */
+   }
+      
 
    if (PRINT)printf("\n");
 

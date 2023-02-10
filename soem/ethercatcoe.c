@@ -835,6 +835,7 @@ int ecx_readPDOmap(ecx_contextt *context, uint16 Slave, uint32 *Osize, uint32 *I
          rdl = sizeof(tSM); tSM = 0;
          /* read SyncManager Communication Type */
          wkc = ecx_SDOread(context, Slave, ECT_SDO_SMCOMMTYPE, iSM + 1, FALSE, &rdl, &tSM, EC_TIMEOUTRXM);
+         printf("\n-----> SM%d Type: %d\n", iSM, tSM);
          if (wkc > 0)
          {
 // start slave bug prevention code, remove if possible

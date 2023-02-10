@@ -11,6 +11,9 @@
 #ifndef _EC_ETHERCAT_H
 #define _EC_ETHERCAT_H
 
+#define FMMU_SWITCH 1
+#define FMMU_SWITCH_PLC 0
+
 #include "ethercattype.h"
 #include "nicdrv.h"
 #include "ethercatbase.h"
